@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interkum AI Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: transparent;
+            height: 100vh;
+            color: #333;
+            overflow: hidden;
+        }
+
+        /* Floating Chat Button */
+        .chat-toggle-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background: #2563eb;
+            border-radius: 50%;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            z-index: 1000;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .chat-toggle-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+
+        .chat-toggle-button.hidden {
+            display: none;
+        }
+
+        /* Chat Container */
+        .chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 380px;
+            height: 600px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            z-index: 999;
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 0.3s ease;
+            border: 1px solid #e5e7eb;
+        }
+
+        .chat-container.open {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .chat-header {
+            background: white;
+            color: #1f2937;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .header-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bot-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+        }
+
+        .header-text h1 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: #1f2937;
+        }
+
+        .header-text p {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            color: #6b7280;
+            font-size: 20px;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .close-button:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f9fafb;
+            position: relative;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            align-items: flex-start;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message.ai {
+            flex-direction: row;
+        }
+
+        .message-bubble {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            position: relative;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-bubble {
+            background: #2563eb;
+            color: white;
+            margin-left: 8px;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.ai .message-bubble {
+            background: white;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
+            margin-right: 8px;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: #10b981;
+            color: white;
+        }
+
+        .message.ai .message-avatar {
+            background: #2563eb;
+            color: white;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 12px 16px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            margin-right: 8px;
+            max-width: 85%;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #9ca3af;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+
+            0%,
+            60%,
+            100% {
+                opacity: 0.3;
+            }
+
+            30% {
+                opacity: 1;
+            }
+        }
+
+        .chat-input-container {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            position: relative;
+        }
+
+        .input-field {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: #f9fafb;
+            border: 1px solid #d1d5db;
+            border-radius: 24px;
+            padding: 8px 50px 8px 16px;
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus-within {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .chat-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 14px;
+            padding: 8px 0;
+            resize: none;
+            max-height: 120px;
+            min-height: 20px;
+            font-family: inherit;
+            padding-left: 40px;
+            padding-right: 10px;
+            direction: rtl;
+            text-align: right;
+        }
+
+
+        .chat-input::placeholder {
+            color: #9ca3af;
+        }
+
+        .emoji-button {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+            color: #6b7280;
+            position: absolute;
+            right: 12px;
+            top: 55%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+
+        .emoji-button:hover {
+            background: #f3f4f6;
+        }
+
+        .send-button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%) rotate(180deg);
+            z-index: 10;
+        }
+
+        .send-button:hover {
+            background: #1d4ed8;
+        }
+
+        .send-button:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .send-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .emoji-picker {
+            position: absolute;
+            bottom: 90px;
+            right: 20px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            padding: 12px;
+            display: none;
+            z-index: 1000;
+            width: 280px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .emoji-picker.show {
+            display: block;
+            animation: slideUp 0.2s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 4px;
+        }
+
+        .emoji-item {
+            font-size: 20px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .emoji-item:hover {
+            background: #f3f4f6;
+        }
+
+        /* Scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 2px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+
+        /* Responsive design */
+        @media (max-width: 480px) {
+            .chat-container {
+                width: calc(100vw - 40px);
+                height: calc(100vh - 40px);
+                bottom: 20px;
+                right: 20px;
+            }
+
+            .emoji-picker {
+                right: 20px;
+                left: 20px;
+                width: auto;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Floating Chat Button -->
+    <button class="chat-toggle-button" id="chatToggle" aria-label="פתח צ'אט">
+        <svg fill="#ffffff" width="35px" height="35px" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+            <path
+                d="M128,20A108.03119,108.03119,0,0,0,32.51758,178.50781L24.418,206.85645A19.99924,19.99924,0,0,0,49.1416,231.582l28.35156-8.09912A108.00773,108.00773,0,1,0,128,20Zm0,192a83.86908,83.86908,0,0,1-42.86328-11.74316,12.00316,12.00316,0,0,0-9.43067-1.22461l-26.23339,7.49511,7.49414-26.23291a11.99855,11.99855,0,0,0-1.22461-9.43017A84.01118,84.01118,0,1,1,128,212Zm44-104a12.00028,12.00028,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12.00028,12.00028,0,0,1,172,108Zm0,40a12.00028,12.00028,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12.00028,12.00028,0,0,1,172,148Z" />
+        </svg>
+    </button>
+
+
+    <!-- Chat Container -->
+    <div class="chat-container" id="chatContainer">
+        <div class="chat-header">
+            <div class="header-info">
+                <div class="bot-avatar">🤖</div>
+                <div class="header-text">
+                    <h1>Interkum AI</h1>
+                    <p>עוזר חכם ומתקדם</p>
+                </div>
+            </div>
+            <button class="close-button" id="closeButton">×</button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <!-- Messages will be added by JavaScript -->
+        </div>
+
+        <div class="chat-input-container">
+            <div class="input-wrapper">
+                <div class="input-field">
+                    <button class="emoji-button" id="emojiButton" aria-label="בחר אימוג'י">
+                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32"
+                            fill="currentColor">
+                            <path d="M16,0C7.178,0,0,7.178,0,16s7.178,16,16,16c8.82,0,16-7.178,16-16S24.82,0,16,0z M16,29C8.832,29,3,23.168,3,16
+            S8.832,3,16,3s13,5.832,13,13S23.168,29,16,29z M23.167,12c0,1.289-1.045,2.332-2.333,2.332c-1.289,0-2.334-1.043-2.334-2.332
+            s1.045-2.334,2.334-2.334C22.122,9.666,23.167,10.711,23.167,12z M11.167,14.332c-1.289,0-2.334-1.043-2.334-2.332
+            s1.045-2.334,2.334-2.334c1.287,0,2.333,1.045,2.333,2.334S12.454,14.332,11.167,14.332z M22.177,20.62
+            c0.257,0.788-0.177,1.634-0.965,1.889c-1.688,0.546-3.438,0.823-5.212,0.823c-1.773,0-3.525-0.277-5.212-0.823
+            C10,22.254,9.567,21.408,9.823,20.62c0.254-0.787,1.1-1.222,1.889-0.966c2.775,0.897,5.802,0.897,8.576,0
+            C21.079,19.398,21.923,19.833,22.177,20.62z" />
+                        </svg>
+                    </button>
+                    <textarea class="chat-input" id="chatInput" placeholder="הקלד הודעה..." rows="1"></textarea>
+                    <button class="send-button" id="sendButton">
+                        <span>➤</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="emoji-picker" id="emojiPicker">
+            <div class="emoji-grid" id="emojiGrid">
+                <!-- Emojis will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Emoji collection
+        const emojis = [
+            '😊', '😂', '🤣', '😍', '🥰', '😘', '😉', '😎',
+            '🤔', '😐', '😑', '🙄', '😴', '😵', '🤯', '😱',
+            '😭', '😢', '😤', '😡', '🤬', '😈', '👿', '💀',
+            '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '👏',
+            '🙌', '👐', '🤲', '🙏', '✍️', '💪', '🦾', '🦵',
+            '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅',
+            '❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🖤',
+            '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘',
+            '⚡', '🔥', '💥', '✨', '💫', '⭐', '🌟', '🎉'
+        ];
+
+        // DOM elements
+        const chatToggle = document.getElementById('chatToggle');
+        const chatContainer = document.getElementById('chatContainer');
+        const closeButton = document.getElementById('closeButton');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendButton = document.getElementById('sendButton');
+        const emojiButton = document.getElementById('emojiButton');
+        const emojiPicker = document.getElementById('emojiPicker');
+        const emojiGrid = document.getElementById('emojiGrid');
+
+        // Webhook URL
+        const webhookUrl = 'https://hook.eu2.make.com/8a2rn1hhvr8jobm1sytnvks2fbhevulc';
+
+        // משתנה לשמירת ההודעה הקודמת (הקשר)
+        let lastUserMessage = '';
+
+        // Get greeting based on time
+        function getTimeBasedGreeting() {
+            const hour = new Date().getHours();
+
+            if (hour >= 5 && hour < 12) {
+                return 'בוקר טוב במה אוכל לעזור לך היום?';
+            } else if (hour >= 12 && hour < 17) {
+                return 'צהריים טובים במה אוכל לעזור לך היום?';
+            } else if (hour >= 17 && hour < 19) {
+                return 'אחר צהריים טובים במה אוכל לעזור לך היום?';
+            } else if (hour >= 19 && hour < 21) {
+                return 'ערב טוב במה אוכל לעזור לך?';
+            } else {
+                return 'לילה טוב במה אוכל לעזור לך היום?';
+            }
+        }
+
+        // Initialize chat
+        function initChat() {
+            setTimeout(() => {
+                addMessage(getTimeBasedGreeting(), false);
+            }, 500);
+            initEmojiPicker();
+        }
+
+        // Toggle chat visibility
+        function toggleChat() {
+            chatContainer.classList.toggle('open');
+            chatToggle.classList.toggle('hidden');
+            if (chatContainer.classList.contains('open')) {
+                setTimeout(() => chatInput.focus(), 300);
+            }
+        }
+
+        // Close chat
+        function closeChat() {
+            chatContainer.classList.remove('open');
+            chatToggle.classList.remove('hidden');
+            emojiPicker.classList.remove('show');
+        }
+
+        // Initialize emoji picker
+        function initEmojiPicker() {
+            emojiGrid.innerHTML = '';
+            emojis.forEach(emoji => {
+                const emojiItem = document.createElement('div');
+                emojiItem.className = 'emoji-item';
+                emojiItem.textContent = emoji;
+                emojiItem.onclick = () => {
+                    chatInput.value += emoji;
+                    chatInput.focus();
+                    emojiPicker.classList.remove('show');
+                };
+                emojiGrid.appendChild(emojiItem);
+            });
+        }
+
+        // Add message to chat
+        function addMessage(message, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = isUser ? '👤' : '🤖';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = message;
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(bubble);
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message ai';
+            typingDiv.id = 'typingIndicator';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = '🤖';
+
+            const typingBubble = document.createElement('div');
+            typingBubble.className = 'typing-indicator show';
+            typingBubble.innerHTML = `
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+
+            typingDiv.appendChild(avatar);
+            typingDiv.appendChild(typingBubble);
+
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Hide typing indicator
+        function hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        // Send message to webhook, כולל הודעה קודמת (context)
+        async function sendMessage(message, context = '') {
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        context: context,
+                        timestamp: new Date().toISOString(),
+                        source: 'interkum_chat'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const data = await response.text();
+                return data;
+            } catch (error) {
+                console.error('Error sending message:', error);
+                return 'מצטער, יש בעיה בחיבור. אנא נסה שוב.';
+            }
+        }
+
+        // Handle sending message
+        async function handleSendMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            sendButton.disabled = true;
+
+            addMessage(message, true);
+            chatInput.value = '';
+
+            showTypingIndicator();
+
+            // שולחים גם את ההודעה הקודמת בתור context
+            const response = await sendMessage(message, lastUserMessage);
+
+            hideTypingIndicator();
+
+            addMessage(response, false);
+
+            sendButton.disabled = false;
+
+            // מעדכנים את lastUserMessage
+            lastUserMessage = message;
+        }
+
+        // Auto-resize textarea
+        function autoResize() {
+            chatInput.style.height = 'auto';
+            chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+        }
+
+        // Event listeners
+        chatToggle.addEventListener('click', toggleChat);
+        closeButton.addEventListener('click', closeChat);
+        sendButton.addEventListener('click', handleSendMessage);
+
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        chatInput.addEventListener('input', autoResize);
+
+        emojiButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            emojiPicker.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!emojiPicker.contains(e.target) && !emojiButton.contains(e.target)) {
+                emojiPicker.classList.remove('show');
+            }
+        });
+
+        // Initialize chat
+        initChat();
+    </script>
+</body>
+
+</html>
