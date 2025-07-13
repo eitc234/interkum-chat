@@ -20,7 +20,7 @@
             overflow: hidden;
         }
 
-        /* Chat Container - תמיד גלוי */
+        /* Chat Container - always visible */
         .chat-container {
             position: fixed;
             bottom: 20px;
@@ -120,6 +120,25 @@
             word-wrap: break-word;
             font-size: 14px;
             line-height: 1.5;
+        }
+
+        .message-bubble a {
+            color: inherit;
+            text-decoration: underline;
+            font-weight: 500;
+        }
+
+        .message.user .message-bubble a {
+            color: #e0f2fe;
+        }
+
+        .message.ai .message-bubble a {
+            color: #1d4ed8;
+        }
+
+        .message-bubble a:hover {
+            text-decoration: none;
+            opacity: 0.8;
         }
 
         .message.user .message-bubble {
@@ -401,7 +420,7 @@
 </head>
 
 <body>
-    <!-- Chat Container - תמיד גלוי -->
+    <!-- Chat Container - Always Open -->
     <div class="chat-container" id="chatContainer">
         <div class="chat-header">
             <div class="header-info">
@@ -461,6 +480,11 @@
             '⚡', '🔥', '💥', '✨', '💫', '⭐', '🌟', '🎉'
         ];
 
+        // Global variables
+        const webhookUrl = 'https://hook.eu2.make.com/8a2rn1hhvr8jobm1sytnvks2fbhevulc';
+        let lastUserMessage = '';
+        let threadId = localStorage.getItem('threadId') || null;
+
         // DOM elements
         const chatContainer = document.getElementById('chatContainer');
         const chatMessages = document.getElementById('chatMessages');
@@ -470,38 +494,37 @@
         const emojiPicker = document.getElementById('emojiPicker');
         const emojiGrid = document.getElementById('emojiGrid');
 
-        // Webhook URL
-        const webhookUrl = 'https://hook.eu2.make.com/8a2rn1hhvr8jobm1sytnvks2fbhevulc';
-
-        // משתנה לשמירת ההודעה הקודמת (הקשר)
-        let lastUserMessage = '';
+        // UUID validation function
+        function isValidUUID(str) {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            return uuidRegex.test(str);
+        }
 
         // Get greeting based on time
         function getTimeBasedGreeting() {
             const hour = new Date().getHours();
 
             if (hour >= 5 && hour < 12) {
-                return 'בוקר טוב במה אוכל לעזור לך היום?';
+                return 'בוקר טוב! במה אוכל לעזור לך היום?';
             } else if (hour >= 12 && hour < 17) {
-                return 'צהריים טובים במה אוכל לעזור לך היום?';
+                return 'צהריים טובים! במה אוכל לעזור לך היום?';
             } else if (hour >= 17 && hour < 19) {
-                return 'אחר צהריים טובים במה אוכל לעזור לך היום?';
+                return 'אחר צהריים טובים! במה אוכל לעזור לך היום?';
             } else if (hour >= 19 && hour < 21) {
-                return 'ערב טוב במה אוכל לעזור לך?';
+                return 'ערב טוב! במה אוכל לעזור לך?';
             } else {
-                return 'לילה טוב במה אוכל לעזור לך היום?';
+                return 'לילה טוב! במה אוכל לעזור לך היום?';
             }
         }
 
         // Initialize chat
         function initChat() {
-            // מיד כשהעמוד נטען, נתן פוקוס לשדה הקלט
-            chatInput.focus();
-            
             setTimeout(() => {
                 addMessage(getTimeBasedGreeting(), false);
             }, 500);
             initEmojiPicker();
+            // Focus on input when chat loads
+            setTimeout(() => chatInput.focus(), 300);
         }
 
         // Initialize emoji picker
@@ -520,6 +543,36 @@
             });
         }
 
+        // Convert URLs, emails, and phone numbers to clickable links
+        function linkifyText(text) {
+            // URL pattern - matches http/https URLs
+            const urlPattern = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+            
+            // Email pattern
+            const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+            
+            // Phone pattern (Israeli format and international)
+            const phonePattern = /(\+972|0)[-\s]?[1-9][-\s]?[0-9]{3}[-\s]?[0-9]{4}|\b\d{2,3}[-\s]?\d{7,8}\b/g;
+            
+            // Replace URLs
+            text = text.replace(urlPattern, (url) => {
+                return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+            });
+            
+            // Replace emails
+            text = text.replace(emailPattern, (email) => {
+                return `<a href="mailto:${email}">${email}</a>`;
+            });
+            
+            // Replace phone numbers
+            text = text.replace(phonePattern, (phone) => {
+                const cleanPhone = phone.replace(/[-\s]/g, '');
+                return `<a href="tel:${cleanPhone}">${phone}</a>`;
+            });
+            
+            return text;
+        }
+
         // Add message to chat
         function addMessage(message, isUser = false) {
             const messageDiv = document.createElement('div');
@@ -531,7 +584,10 @@
 
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
-            bubble.textContent = message;
+            
+            // Apply linkification to the message
+            const linkedMessage = linkifyText(message);
+            bubble.innerHTML = linkedMessage;
 
             messageDiv.appendChild(avatar);
             messageDiv.appendChild(bubble);
@@ -575,31 +631,96 @@
             }
         }
 
-        // Send message to webhook, כולל הודעה קודמת (context)
+        // Parse server response - handles both JSON and text formats
+        function parseServerResponse(responseText) {
+            console.log('📄 Raw response:', responseText);
+            
+            // First, try to parse as JSON
+            try {
+                const jsonData = JSON.parse(responseText);
+                console.log('✅ Parsed as JSON:', jsonData);
+                
+                // Extract threadId if present
+                if (jsonData.threadId) {
+                    threadId = jsonData.threadId;
+                    localStorage.setItem('threadId', threadId);
+                    console.log('💾 Saved threadId from JSON:', threadId);
+                }
+                
+                // Return the message
+                return jsonData.reply || jsonData.message || jsonData.response || jsonData.answer || jsonData.text || 'תגובה לא מובנת';
+                
+            } catch (jsonError) {
+                console.log('📝 Not JSON, parsing as text with UUID');
+                
+                // Look for UUID pattern at the end of the response
+                const words = responseText.trim().split(/\s+/);
+                const lastWord = words[words.length - 1];
+                
+                if (isValidUUID(lastWord)) {
+                    // Found UUID at the end
+                    threadId = lastWord;
+                    localStorage.setItem('threadId', threadId);
+                    console.log('💾 Saved threadId from text:', threadId);
+                    
+                    // Return message without the UUID
+                    const messageWithoutUUID = words.slice(0, -1).join(' ');
+                    return messageWithoutUUID || 'תגובה ריקה';
+                } else {
+                    // No UUID found, return the entire response
+                    return responseText;
+                }
+            }
+        }
+
+        // Send message to webhook
         async function sendMessage(message, context = '') {
             try {
+                console.log('🚀 Sending message:', { message, context, threadId });
+                
+                const payload = {
+                    message: message,
+                    context: context,
+                    threadId: threadId,
+                    timestamp: new Date().toISOString(),
+                    source: 'interkum_chat'
+                };
+                
+                console.log('📦 Payload:', JSON.stringify(payload, null, 2));
+                
                 const response = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({
-                        message: message,
-                        context: context,
-                        timestamp: new Date().toISOString(),
-                        source: 'interkum_chat'
-                    })
+                    body: JSON.stringify(payload)
                 });
 
+                console.log('📡 Response status:', response.status);
+                console.log('📡 Response ok:', response.ok);
+
                 if (!response.ok) {
-                    throw new Error('Network response was not ok');
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                const data = await response.text();
-                return data;
+                // Get response as text
+                const responseText = await response.text();
+                
+                // Parse the response using our new function
+                const parsedMessage = parseServerResponse(responseText);
+                
+                console.log('✅ Final message:', parsedMessage);
+                return parsedMessage;
+                
             } catch (error) {
-                console.error('Error sending message:', error);
-                return 'מצטער, יש בעיה בחיבור. אנא נסה שוב.';
+                console.error('❌ Error sending message:', error);
+                
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    return 'שגיאת רשת: לא ניתן להתחבר לשרת. בדוק את החיבור לאינטרנט.';
+                }
+                
+                return `שגיאה: ${error.message}`;
             }
         }
 
@@ -609,23 +730,23 @@
             if (!message) return;
 
             sendButton.disabled = true;
-
             addMessage(message, true);
             chatInput.value = '';
 
             showTypingIndicator();
 
-            // שולחים גם את ההודעה הקודמת בתור context
-            const response = await sendMessage(message, lastUserMessage);
-
-            hideTypingIndicator();
-
-            addMessage(response, false);
+            try {
+                const response = await sendMessage(message, lastUserMessage);
+                hideTypingIndicator();
+                addMessage(response, false);
+                lastUserMessage = message;
+            } catch (error) {
+                hideTypingIndicator();
+                addMessage('שגיאה בקבלת תשובה. אנא נסה שוב.', false);
+                console.error('Error in handleSendMessage:', error);
+            }
 
             sendButton.disabled = false;
-
-            // מעדכנים את lastUserMessage
-            lastUserMessage = message;
         }
 
         // Auto-resize textarea
